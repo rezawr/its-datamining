@@ -3,7 +3,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from imblearn.over_sampling import SMOTE
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import Pipeline
+# from sklearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
 import psutil
 import random
 
