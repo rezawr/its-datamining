@@ -86,6 +86,14 @@ def main():
         thread.join()
 
     print("Simulation completed.")
+    # Convert the dictionaries into DataFrames
+    results_df = pd.DataFrame(result)
+    performance_df = pd.DataFrame(performance)
+
+    # Save the DataFrames to CSV files
+    results_df.to_csv('results.csv', index=False)
+    performance_df.to_csv('performance.csv', index=False)
+
     print(performance)
     print(result)
 
