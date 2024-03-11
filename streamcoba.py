@@ -13,19 +13,16 @@ import numpy as np
 from sklearn.utils import shuffle
 
 # Simulated duration in seconds for each phase
-# duration = 3600
-# duration_training = 300
-duration = 60
-duration_training = 10
+duration = 3600
+duration_training = 300
 
 # Global model, results dictionary, and thread list for validation threads
 validation_threads = []
 max_validation_threads = 50  # Set a maximum number of validation threads to prevent overloading
 
 
-# Load the dataset (adjust the path to where you have your dataset)
-df = pd.read_csv('datasets/IMDB Dataset.csv')
-X_train, X_test, y_train, y_test = train_test_split(df['review'], df['sentiment'], random_state=0, train_size=0.8)
+chunk_size = 5000  # Adjust based on your Raspberry Pi's memory capacity
+chunks_processed = 0
 
 # Global model and results dictionary
 textclassifier = make_pipeline(
@@ -34,8 +31,28 @@ textclassifier = make_pipeline(
     SMOTE(random_state=12),
     MultinomialNB()
 )
+
+for chunk in pd.read_csv('datasets/IMDB Dataset.csv', chunksize=chunk_size):
+    # Simulate random sampling from each chunk
+    data_sample = chunk.sample(frac=0.1)  # Adjust sampling rate as needed
+
+    X_train, X_test, y_train, y_test = train_test_split(data_sample['review'], data_sample['sentiment'], random_state=0, train_size=0.8)
+    
+    # Fit the classifier on the current chunk (you might want to fit it on a cumulated dataset or adjust as needed)
+    textclassifier.fit(X_train, y_train)
+
+    # Optional: Evaluate the classifier here or perform other operations
+
+    chunks_processed += 1
+    print(f"Processed {chunks_processed} chunks.")
+
+
+# Load the dataset (adjust the path to where you have your dataset)
+df = pd.read_csv('datasets/IMDB Dataset.csv')
+# X_train, X_test, y_train, y_test = train_test_split(df['review'], df['sentiment'], random_state=0, train_size=0.8)
+
 # Initial training
-textclassifier.fit(X_train, y_train)
+# textclassifier.fit(X_train, y_train)
 
 # Assume these are globally defined after the initial fit
 global_vect = textclassifier.named_steps['countvectorizer']
@@ -80,7 +97,7 @@ def validation(stop_event):
 
 def train(stop_event, model):
     global X_train, y_train
-    chunk_size = 1000  # Define your chunk size here
+    chunk_size = 5000  # Define your chunk size here
     while not stop_event.is_set():
         with lock:
             print("=========================================")
