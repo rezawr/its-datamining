@@ -80,7 +80,7 @@ def validation(stop_event):
 
 def train(stop_event, model):
     global X_train, y_train
-    chunk_size = 5000  # Define your chunk size here
+    chunk_size = 1000  # Define your chunk size here
     while not stop_event.is_set():
         with lock:
             print("=========================================")
