@@ -10,10 +10,11 @@ from sklearn.naive_bayes import MultinomialNB
 from imblearn.pipeline import make_pipeline
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import numpy as np
+from sklearn.utils import shuffle
 
 # Simulated duration in seconds for each phase
-duration = 60
-duration_training = 10
+duration = 3600
+duration_training = 300
 
 # Load the dataset (adjust the path to where you have your dataset)
 df = pd.read_csv('datasets/IMDB Dataset.csv')
@@ -29,13 +30,28 @@ textclassifier = make_pipeline(
 # Initial training
 textclassifier.fit(X_train, y_train)
 
+# Assume these are globally defined after the initial fit
+global_vect = textclassifier.named_steps['countvectorizer']
+global_tfidf = textclassifier.named_steps['tfidftransformer']
+# Simplify the model for direct access; this requires re-initialization or adjustment if using pipeline
+model = MultinomialNB()
+
 result = {'accuracy': [], 'f1': [], 'precision': [], 'recall': []}
 performance = {'cpu': [], 'memory': []}
 
 # Lock for thread-safe operations
 lock = threading.Lock()
 
+def preprocess_and_train(X, y, model):
+    # Transform the text data using the pre-fitted vectorizer and TF-IDF transformer
+    X_vect = global_vect.transform(X)
+    X_tfidf = global_tfidf.transform(X_vect)
+    
+    # Fit the model (assuming y is already prepared)
+    model.partial_fit(X_tfidf, y, classes=np.unique(y))
+
 def validation(stop_event):
+    global X_train, y_train
     while not stop_event.is_set():
         with lock:
             data_sample = df.sample(random.randint(1, 100))
@@ -44,6 +60,9 @@ def validation(stop_event):
 
             y_pred = textclassifier.predict(X_sample)
 
+            X_train = pd.concat([X_train, X_sample])
+            y_train = pd.concat([y_train, pd.Series(y_pred)])
+
             result['accuracy'].append(accuracy_score(y_true, y_pred))
             result['f1'].append(f1_score(y_true, y_pred, average='weighted'))
             result['precision'].append(precision_score(y_true, y_pred, average='weighted'))
@@ -51,11 +70,30 @@ def validation(stop_event):
 
         time.sleep(1)
 
-def train(stop_event):
+def train(stop_event, model):
+    global X_train, y_train
+    chunk_size = 5000  # Define your chunk size here
     while not stop_event.is_set():
         with lock:
-            # Re-train the classifier
-            textclassifier.fit(X_train, y_train)
+            print("=========================================")
+            print(len(X_train))
+            print(len(y_train))
+            print("=========================================")
+            # Ensure the data is shuffled before splitting into chunks
+            X_train_shuffled, y_train_shuffled = shuffle(X_train, y_train)
+            
+            num_chunks = int(np.ceil(len(X_train) / chunk_size))
+            for i in range(num_chunks):
+                start = i * chunk_size
+                end = start + chunk_size
+                X_chunk = X_train_shuffled.iloc[start:end]
+                y_chunk = y_train_shuffled.iloc[start:end]
+                
+                # Process and train on the chunk
+                preprocess_and_train(X_chunk, y_chunk, model)
+            
+            print(f"Completed training on {num_chunks} chunks.")
+        
         time.sleep(duration_training)
 
 def record_performance(stop_event):
@@ -72,7 +110,7 @@ def main():
 
     threads = [
         threading.Thread(target=validation, args=(stop_event,)),
-        threading.Thread(target=train, args=(stop_event,)),
+        threading.Thread(target=train, args=(stop_event, model)),
         threading.Thread(target=record_performance, args=(stop_event,))
     ]
 
