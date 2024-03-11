@@ -13,8 +13,15 @@ import numpy as np
 from sklearn.utils import shuffle
 
 # Simulated duration in seconds for each phase
-duration = 3600
-duration_training = 300
+# duration = 3600
+# duration_training = 300
+duration = 60
+duration_training = 10
+
+# Global model, results dictionary, and thread list for validation threads
+validation_threads = []
+max_validation_threads = 50  # Set a maximum number of validation threads to prevent overloading
+
 
 # Load the dataset (adjust the path to where you have your dataset)
 df = pd.read_csv('datasets/IMDB Dataset.csv')
@@ -38,6 +45,7 @@ model = MultinomialNB()
 
 result = {'accuracy': [], 'f1': [], 'precision': [], 'recall': []}
 performance = {'cpu': [], 'memory': []}
+totalThread = []
 
 # Lock for thread-safe operations
 lock = threading.Lock()
@@ -104,15 +112,44 @@ def record_performance(stop_event):
             performance['cpu'].append(cpu)
             performance['memory'].append(memory)
         time.sleep(1)
+        
+def monitor_and_adjust_threads(stop_event):
+    while not stop_event.is_set():
+        cpu = psutil.cpu_percent()
+        memory = psutil.virtual_memory().percent
+        
+        # Check if we should add a validation thread
+        if cpu < 70 and memory < 70 and len(validation_threads) < max_validation_threads:
+            t = threading.Thread(target=validation, args=(stop_event,))
+            t.start()
+            validation_threads.append(t)
+            print(f"Added a validation thread. Total: {len(validation_threads)}")
+        # Reduce to 1 thread if over threshold and more than 1 is running
+        elif (cpu > 70 or memory > 70) and len(validation_threads) > 1:
+            while len(validation_threads) > 1:
+                thread_to_stop = validation_threads.pop()
+                # Not directly stopping the thread, but could signal it to stop if designed to listen for such a signal
+                print(f"Reduced validation threads. Total: {len(validation_threads)}")
+
+        totalThread.append(len(validation_threads))
+        time.sleep(1)  # Check every 1 seconds
 
 def main():
     stop_event = threading.Event()
 
     threads = [
-        threading.Thread(target=validation, args=(stop_event,)),
         threading.Thread(target=train, args=(stop_event, model)),
         threading.Thread(target=record_performance, args=(stop_event,))
     ]
+    
+    # Start initial validation thread
+    initial_validation_thread = threading.Thread(target=validation, args=(stop_event,))
+    initial_validation_thread.start()
+    validation_threads.append(initial_validation_thread)
+    
+    # Start the monitor and adjust threads function
+    monitor_thread = threading.Thread(target=monitor_and_adjust_threads, args=(stop_event,))
+    monitor_thread.start()
 
     for thread in threads:
         thread.start()
@@ -127,10 +164,12 @@ def main():
     # Convert the dictionaries into DataFrames
     results_df = pd.DataFrame(result)
     performance_df = pd.DataFrame(performance)
+    totalThread_df = pd.DataFrame(totalThread)
 
     # Save the DataFrames to CSV files
     results_df.to_csv('results.csv', index=False)
     performance_df.to_csv('performance.csv', index=False)
+    totalThread_df.to_csv('thread_monitoring.csv', index=False)
 
     print(performance)
     print(result)
