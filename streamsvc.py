@@ -15,10 +15,8 @@ import numpy as np
 from sklearn.utils import shuffle
 
 # Simulated duration in seconds for each phase
-# duration = 3600
-# duration_training = 300
-duration = 60
-duration_training = 10
+duration = 3600
+duration_training = 300
 
 # Global model, results dictionary, and thread list for validation threads
 validation_threads = []
